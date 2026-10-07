@@ -18,11 +18,11 @@
 
     <header class="flex flex-col lg:flex-row items-center justify-between gap-3">
       <div class="flex w-full flex-col items-start gap-2 lg:w-auto">
-        <nav class="flex items-center gap-2 w-full justify-start overflow-x-auto pb-1" aria-label="ประเภท">
-          <button id="filter-all" onclick="loadDeezerChart()" class="bg-pill-active px-6 py-2 rounded-full font-medium shadow transition hover:scale-105 active:scale-95 text-sm md:text-base">
+        <nav class="flex flex-wrap items-center gap-2 w-full justify-start" aria-label="ประเภท">
+          <button id="filter-all" onclick="loadDeezerChart()" class="bg-pill-active px-6 py-2 rounded-full font-medium shadow transition hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-music mr-1" aria-hidden="true"></i> เพลง
           </button>
-          <button id="filter-artist" onclick="showPopularArtists()" class="bg-pill px-6 py-2 rounded-full font-medium shadow transition hover:scale-105 active:scale-95 text-sm md:text-base">
+          <button id="filter-artist" onclick="showPopularArtists()" class="bg-pill px-6 py-2 rounded-full font-medium shadow transition hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap">
             <i class="fa-solid fa-microphone mr-1" aria-hidden="true"></i> นักร้อง
           </button>
           <button id="filter-popular-albums" onclick="loadDeezerAlbums()" class="bg-pill px-6 py-2 rounded-full font-medium shadow transition hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap">
