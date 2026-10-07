@@ -1,5 +1,4 @@
 /* Deezer music browser and player. */
-  
  const MOCK_DEEZER_SONGS = [  
  {  
  id: 1109731,  
@@ -19,7 +18,7 @@
  cover_small: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=100&auto=format&fit=crop&q=80",  
  cover_medium: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80",  
  cover_big: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&auto=format&fit=crop&q=80"  
- }  
+ }
  },  
  {  
  id: 9120442,  
@@ -102,31 +101,19 @@
  }  
  }  
  ];  
-  
  let songList = []; // Active list of track objects  
  let currentSong = null; // Currently playing song  
  let isPlaying = false; // Audio playback state  
-let durationSortDescending = false;
-let rankSortDescending = true;
-let currentSearchQuery = 'music';
-let currentDataSource = 'chart';
-let nextSearchOffset = 0;
-let hasMoreSongs = false;
-let isLoadingMoreSongs = false;
-let isAlbumListVisible = false;
-let popularAlbumList = [];
-let visibleAlbumCount = 0;
-let hasMoreAlbums = false;
-let isArtistListVisible = false;
-let popularArtistList = [];
-let visibleArtistCount = 0;
-let hasMoreArtists = false;
-let currentArtistId = null;
-const DEEZER_PAGE_SIZE = 25;
-const DEEZER_CHART_SIZE = 100;
-const DEEZER_ALBUM_PAGE_SIZE = 25;
-const DEEZER_ARTIST_PAGE_SIZE = 25;
-  
+ let durationSortDescending = false;
+ let rankSortDescending = true;
+ let currentListType = 'songs';
+ let popularAlbumList = [];
+ let popularArtistList = [];
+ const DEEZER_PAGE_SIZE = 50;
+ const DEEZER_CHART_SIZE = 100;
+ const DEEZER_ALBUM_SIZE = 50;
+
+
  // DOM Element References  
  const audioEngine = document.getElementById('audio-engine');  
  const songListContainer = document.getElementById('song-list-container');  
@@ -136,8 +123,6 @@ const DEEZER_ARTIST_PAGE_SIZE = 25;
  const audioProgress = document.getElementById('audio-progress');  
  const currentTimeTxt = document.getElementById('current-time-txt');  
  const totalTimeTxt = document.getElementById('total-time-txt');  
-const loadMoreButton = document.getElementById('load-more-btn');
-  //***************************************************************************************************************************
  function requestDeezerApi(endpoint) {
  return new Promise((resolve, reject) => {
  const callbackName = `deezerJsonp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -158,13 +143,12 @@ const loadMoreButton = document.getElementById('load-more-btn');
  document.head.appendChild(script);
  });
  }
-//***************************************************************************************************************************
- function requestDeezerSearch(searchQuery, offset = 0) {
- return requestDeezerApi(`search?q=${encodeURIComponent(searchQuery)}&index=${offset}&limit=${DEEZER_PAGE_SIZE}`);
+ function requestDeezerSearch(searchQuery) {
+ return requestDeezerApi(`search?q=${encodeURIComponent(searchQuery)}&index=0&limit=${DEEZER_PAGE_SIZE}`);
  }
 
- function requestDeezerChart(offset = 0, limit = DEEZER_PAGE_SIZE) {
- return requestDeezerApi(`chart/0/tracks?index=${offset}&limit=${limit}`);
+ function requestDeezerChart(limit = DEEZER_PAGE_SIZE) {
+ return requestDeezerApi(`chart/0/tracks?index=0&limit=${limit}`);
  }
 
  function requestDeezerAlbum(albumId) {
@@ -179,145 +163,107 @@ const loadMoreButton = document.getElementById('load-more-btn');
  return requestDeezerApi(`artist/${artistId}`);
  }
 
- function requestDeezerArtistTop(artistId, offset = 0) {
- return requestDeezerApi(`artist/${artistId}/top?index=${offset}&limit=${DEEZER_PAGE_SIZE}`);
+ function requestDeezerArtistTop(artistId) {
+ return requestDeezerApi(`artist/${artistId}/top?index=0&limit=${DEEZER_PAGE_SIZE}`);
  }
-//***************************************************************************************************************************
- async function loadDeezerData(searchQuery = 'music', append = false, fromChart = false, fromAlbum = false, albumId = null, artistId = null) {  
- showToast("กำลังดึงข้อมูลจาก Deezer API...", "info");  
-   
-try {  
- const query = searchQuery.trim() || 'music';
- const offset = append ? nextSearchOffset : 0;
- const artistProfile = artistId ? await requestDeezerArtist(artistId) : null;
- let data;
- let tracks;
- let artistSearchFallback = false;
- if (artistId) {
- data = await requestDeezerArtistTop(artistId, offset);
- tracks = data.data;
- if (!tracks?.length) {
- data = await requestDeezerSearch(artistProfile.name, offset);
- tracks = data.data?.filter(track => track.artist?.id === artistId) || [];
- artistSearchFallback = true;
- }
- } else {
- data = fromAlbum
- ? await requestDeezerAlbum(albumId)
- : fromChart
- ? await requestDeezerChart(offset)
- : await requestDeezerSearch(query, offset);
- tracks = fromAlbum ? data.tracks?.data : data.data;
- }
-   
-if (data && tracks && tracks.length > 0) {  
- // Format API response to match our specification standard  
- const fetchedSongs = tracks.filter(item => item.album?.id !== 302127).map(item => ({  //************************************************************************* */
- id: item.id,  
- title: item.title,  
- duration: item.duration,
- rank: item.rank || Math.floor(Math.random() * 500000 + 500000),  
- preview: item.preview, // 30s preview URL  
- artist: {  
- id: item.artist.id,  
- name: item.artist.name,  
- picture_small: item.artist.picture_small || item.artist.picture,  
- picture_medium: item.artist.picture_medium || item.artist.picture  
- },  
- album: {  
- id: item.album.id,  
- title: item.album.title,  
- cover_small: item.album.cover_small || item.album.cover,  
- cover_medium: item.album.cover_medium || item.album.cover,  
- cover_big: item.album.cover_big || item.album.cover  
- }  
- }));  
- if (append) {
- const existingIds = new Set(songList.map(song => song.id));
- songList.push(...fetchedSongs.filter(song => !existingIds.has(song.id)));
- } else {
- setActiveSortButton(null);
- isAlbumListVisible = false;
- isArtistListVisible = false;
- songList = fetchedSongs;
- currentSearchQuery = query;
- currentArtistId = artistId;
- currentDataSource = artistId ? 'artist' : fromChart ? 'chart' : 'search';
- if (fromAlbum) currentDataSource = 'album';
- setActiveFilter(artistId ? 'filter-artist' : fromAlbum ? 'filter-popular-albums' : 'filter-all');
- document.getElementById('collection-label').textContent = artistId
- ? `${artistProfile.name} · เพลงยอดนิยม`
- : fromAlbum
- ? `${data.title} · ${data.artist.name}`
- : fromChart ? 'เพลงฮิตจาก Deezer' : `ค้นหา: ${query}`;
- }
- nextSearchOffset = offset + (artistSearchFallback ? data.data.length : tracks.length);
- hasMoreSongs = fromChart
- ? nextSearchOffset < DEEZER_CHART_SIZE
- : artistId
- ? nextSearchOffset < data.total
- : fromAlbum
- ? false
- : nextSearchOffset < data.total;
-   
-showToast(`โหลดเพลงจาก Deezer แล้ว ${songList.length} รายการ`, "success");  
- } else {  
- throw new Error("No track data found");  
- }  
- } catch (err) {  
- console.warn("Deezer API call failed; keeping available demo data:", err);  
- if (artistId && !append) {
- songList = [];
- currentSong = null;
- hasMoreSongs = false;
- document.getElementById('collection-label').textContent = 'เพลงของศิลปิน';
- renderSongList();
- updateLoadMoreButton();
- showToast("ดึงเพลงของศิลปินจาก Deezer ไม่สำเร็จ", "error");
- return;
- }
- if (songList.length === 0) {  
- songList = [...MOCK_DEEZER_SONGS];  
- renderSongList();  
- if (songList.length > 0) selectSongById(songList[0].id, false);  
- }  
- hasMoreSongs = false;
- updateLoadMoreButton();
- showToast(songList.length ? "โหลดไม่สำเร็จ คงรายการเดิมไว้" : "เชื่อมต่อ Deezer ไม่ได้ ใช้เพลงตัวอย่างแทน", songList.length ? "error" : "info");  
- return;  
- }  
-  
- renderSongList();  
- updateLoadMoreButton();
-   
- if (!append && songList.length > 0) {  
- selectSongById(songList[0].id, false);  
- }  
- }  
 
- async function loadMoreDeezerData() {
- if (isLoadingMoreSongs || (isAlbumListVisible ? !hasMoreAlbums : isArtistListVisible ? !hasMoreArtists : !hasMoreSongs)) return;
- isLoadingMoreSongs = true;
- updateLoadMoreButton();
- if (isAlbumListVisible) {
- visibleAlbumCount = Math.min(visibleAlbumCount + DEEZER_ALBUM_PAGE_SIZE, popularAlbumList.length);
- hasMoreAlbums = visibleAlbumCount < popularAlbumList.length;
- renderAlbumList();
- isLoadingMoreSongs = false;
- updateLoadMoreButton();
- return;
- }
- if (isArtistListVisible) {
- visibleArtistCount = Math.min(visibleArtistCount + DEEZER_ARTIST_PAGE_SIZE, popularArtistList.length);
- hasMoreArtists = visibleArtistCount < popularArtistList.length;
- renderArtistList();
- isLoadingMoreSongs = false;
- updateLoadMoreButton();
- return;
- }
- await loadDeezerData(currentSearchQuery, true, currentDataSource === 'chart', currentDataSource === 'album', null, currentDataSource === 'artist' ? currentArtistId : null);
- isLoadingMoreSongs = false;
- updateLoadMoreButton();
+ async function loadDeezerData(searchQuery = 'music', source = 'search', itemId = null) {
+  showToast("กำลังดึงข้อมูลจาก Deezer API...", "info");
+
+  try {
+   const query = searchQuery.trim() || 'music';
+   let data;
+   let tracks;
+   let collectionLabel = `ค้นหา: ${query}`;
+   let filterId = 'filter-all';
+
+   if (source === 'artist') {
+    const artist = await requestDeezerArtist(itemId);
+    data = await requestDeezerArtistTop(itemId);
+    tracks = data.data;
+
+    if (!tracks?.length) {
+     data = await requestDeezerSearch(artist.name);
+     tracks = data.data?.filter(track => track.artist?.id === itemId) || [];
+    }
+
+    collectionLabel = `${artist.name} · เพลงยอดนิยม`;
+    filterId = 'filter-artist';
+   } else if (source === 'album') {
+    data = await requestDeezerAlbum(itemId);
+    tracks = data.tracks?.data;
+    collectionLabel = `${data.title} · ${data.artist.name}`;
+    filterId = 'filter-popular-albums';
+   } else if (source === 'chart') {
+    data = await requestDeezerChart();
+    tracks = data.data;
+    collectionLabel = 'เพลงฮิตจาก Deezer';
+   } else {
+    data = await requestDeezerSearch(query);
+    tracks = data.data;
+   }
+
+   if (!data || !tracks || tracks.length === 0) {
+    throw new Error('No track data found');
+   }
+
+   songList = tracks
+    .filter(track => track.album?.id !== 302127)
+    .map(track => ({
+     id: track.id,
+     title: track.title,
+     duration: track.duration,
+     rank: track.rank || Math.floor(Math.random() * 500000 + 500000),
+     preview: track.preview,
+     artist: {
+      id: track.artist.id,
+      name: track.artist.name,
+      picture_small: track.artist.picture_small || track.artist.picture,
+      picture_medium: track.artist.picture_medium || track.artist.picture
+     },
+     album: {
+      id: track.album.id,
+      title: track.album.title,
+      cover_small: track.album.cover_small || track.album.cover,
+      cover_medium: track.album.cover_medium || track.album.cover,
+      cover_big: track.album.cover_big || track.album.cover
+     }
+    }));
+
+   setActiveSortButton(null);
+   currentListType = 'songs';
+   setActiveFilter(filterId);
+   document.getElementById('collection-label').textContent = collectionLabel;
+   showToast(`โหลดเพลงจาก Deezer แล้ว ${songList.length} รายการ`, "success");
+  } catch (err) {
+   console.warn("Deezer API call failed; keeping available demo data:", err);
+
+   if (source === 'artist') {
+    songList = [];
+    currentSong = null;
+    document.getElementById('collection-label').textContent = 'เพลงของศิลปิน';
+    renderSongList();
+    showToast("ดึงเพลงของศิลปินจาก Deezer ไม่สำเร็จ", "error");
+    return;
+   }
+
+   if (songList.length === 0) {
+    songList = [...MOCK_DEEZER_SONGS];
+    renderSongList();
+    selectSongById(songList[0].id, false);
+   }
+
+   showToast(
+    songList.length ? "โหลดไม่สำเร็จ คงรายการเดิมไว้" : "เชื่อมต่อ Deezer ไม่ได้ ใช้เพลงตัวอย่างแทน",
+    songList.length ? "error" : "info"
+   );
+   return;
+  }
+
+  renderSongList();
+  if (songList.length > 0) {
+   selectSongById(songList[0].id, false);
+  }
  }
 
  function setActiveFilter(activeButtonId) {
@@ -331,29 +277,28 @@ showToast(`โหลดเพลงจาก Deezer แล้ว ${songList.leng
 
  function loadDeezerChart() {
  setActiveFilter('filter-all');
- return loadDeezerData('เพลงฮิต Deezer', false, true);
+ return loadDeezerData('เพลงฮิต Deezer', 'chart');
  }
 
  function loadDeezerAlbum(albumId) {
  if (!albumId || albumId === 302127) return;
  setActiveFilter('filter-popular-albums');
- return loadDeezerData('album', false, false, true, albumId);
+ return loadDeezerData('album', 'album', albumId);
  }
 
  function loadDeezerArtist(artistId) {
  if (!artistId) return;
  setActiveFilter('filter-artist');
- return loadDeezerData('artist', false, false, false, null, artistId);
+ return loadDeezerData('artist', 'artist', artistId);
  }
 
  async function loadDeezerAlbums() {
- isArtistListVisible = false;
- setActiveSortButton(null);
- setSongSortButtonsEnabled(false);
+  setActiveSortButton(null);
+  setSongSortButtonsEnabled(false);
  setActiveFilter('filter-popular-albums');
  showToast("กำลังรวบรวมอัลบั้มจาก Deezer...", "info");
  try {
- const data = await requestDeezerChart(0, DEEZER_CHART_SIZE);
+ const data = await requestDeezerChart(DEEZER_CHART_SIZE);
  const albumsById = new Map();
  data.data.forEach((track, index) => {
  const album = track.album;
@@ -372,89 +317,83 @@ showToast(`โหลดเพลงจาก Deezer แล้ว ${songList.leng
  chartTrackCount: 1
  });
  });
- popularAlbumList = [...albumsById.values()];
- visibleAlbumCount = Math.min(DEEZER_ALBUM_PAGE_SIZE, popularAlbumList.length);
- hasMoreAlbums = visibleAlbumCount < popularAlbumList.length;
- isAlbumListVisible = true;
- currentDataSource = 'albums';
+ popularAlbumList = [...albumsById.values()].slice(0, DEEZER_ALBUM_SIZE);
+ currentListType = 'albums';
  document.getElementById('collection-label').textContent = 'อัลบั้มจาก Deezer';
  renderAlbumList();
- updateLoadMoreButton();
  showToast(`พบ ${popularAlbumList.length} อัลบั้มจากเพลงติดชาร์ต`, "success");
  } catch (err) {
- updateSongSortAvailability();
  console.warn("Deezer chart albums failed:", err);
+ setSongSortButtonsEnabled(currentListType === 'songs');
  showToast("โหลดอัลบั้มไม่สำเร็จ", "error");
  }
  }
 
- async function loadDeezerArtists() {
- isAlbumListVisible = false;
+ async function showPopularArtists() {
  setActiveSortButton(null);
  setSongSortButtonsEnabled(false);
  setActiveFilter('filter-artist');
  showToast("กำลังโหลดนักร้องยอดนิยมจาก Deezer...", "info");
+
  try {
- const data = await requestDeezerArtistChart();
- popularArtistList = data.data || [];
- if (popularArtistList.length === 0) {
- const chart = await requestDeezerChart(0, DEEZER_CHART_SIZE);
- const artistsById = new Map();
- chart.data.forEach(track => {
- const artist = track.artist;
- if (!artist || artistsById.has(artist.id)) return;
- artistsById.set(artist.id, {
- ...artist,
- position: artistsById.size + 1
- });
- });
- popularArtistList = [...artistsById.values()];
- }
- visibleArtistCount = Math.min(DEEZER_ARTIST_PAGE_SIZE, popularArtistList.length);
- hasMoreArtists = visibleArtistCount < popularArtistList.length;
- isArtistListVisible = true;
- currentDataSource = 'artists';
- document.getElementById('collection-label').textContent = 'นักร้องฮิตจาก Deezer';
- renderArtistList();
- updateLoadMoreButton();
- showToast(`พบนักร้องยอดนิยม ${popularArtistList.length} คน`, "success");
+  const data = await requestDeezerArtistChart();
+  popularArtistList = data.data || [];
+
+  if (popularArtistList.length === 0) {
+   const chart = await requestDeezerChart(DEEZER_CHART_SIZE);
+   const artistsById = new Map();
+
+   chart.data.forEach(track => {
+    const artist = track.artist;
+    if (!artist || artistsById.has(artist.id)) return;
+    artistsById.set(artist.id, {
+     ...artist,
+     position: artistsById.size + 1
+    });
+   });
+
+   popularArtistList = [...artistsById.values()];
+  }
+
+  currentListType = 'artists';
+  document.getElementById('collection-label').textContent = 'นักร้องฮิตจาก Deezer';
+  renderArtistList();
+  showToast(`พบนักร้องยอดนิยม ${popularArtistList.length} คน`, "success");
  } catch (err) {
- updateSongSortAvailability();
- console.warn("Deezer chart artists failed:", err);
- showToast("โหลดนักร้องยอดนิยมไม่สำเร็จ", "error");
+  console.warn("Deezer chart artists failed:", err);
+  setSongSortButtonsEnabled(currentListType === 'songs');
+  showToast("โหลดนักร้องยอดนิยมไม่สำเร็จ", "error");
  }
  }
 
  function renderArtistList() {
- updateSongSortAvailability();
- const visibleArtists = popularArtistList.slice(0, visibleArtistCount);
- document.getElementById('track-count').textContent = `(${visibleArtists.length} นักร้อง)`;
+ setSongSortButtonsEnabled(false);
+ document.getElementById('track-count').textContent = `(${popularArtistList.length} นักร้อง)`;
  songListContainer.innerHTML = '';
 
- visibleArtists.forEach(artist => {
- const cardDiv = document.createElement('div');
- cardDiv.className = 'bg-card-item rounded-2xl p-3 flex items-center justify-between transition-all duration-200 hover:shadow-lg';
- cardDiv.innerHTML = `
- <div class="flex items-center gap-3 overflow-hidden pr-2">
- <img src="${artist.picture_medium || artist.picture_small || artist.picture}" alt="${artist.name}" class="w-14 h-14 rounded-full object-cover border-2 border-purple-800 shadow-md shrink-0" onerror="this.src='https://placehold.co/100x100/666666/ffffff?text=Artist'" />
- <div class="overflow-hidden">
- <h3 class="font-bold text-purple-950 text-base md:text-lg truncate leading-tight">${artist.name}</h3>
- <p class="text-purple-700/80 text-xs font-medium truncate">อันดับนักร้อง #${artist.position}</p>
- </div>
- </div>
- <button onclick="loadDeezerArtist(${artist.id})" class="bg-select-btn font-semibold px-4 py-2 rounded-full text-sm shadow transition-all duration-150 hover:scale-105 active:scale-95 shrink-0">ดูเพลง</button>
- `;
- songListContainer.appendChild(cardDiv);
+ popularArtistList.forEach(artist => {
+  const cardDiv = document.createElement('div');
+  cardDiv.className = 'bg-card-item rounded-2xl p-3 flex items-center justify-between transition-all duration-200 hover:shadow-lg';
+  cardDiv.innerHTML = `
+   <div class="flex items-center gap-3 overflow-hidden pr-2">
+    <img src="${artist.picture_medium || artist.picture_small || artist.picture}" alt="${artist.name}" class="w-14 h-14 rounded-full object-cover border-2 border-purple-800 shadow-md shrink-0" onerror="this.src='https://placehold.co/100x100/666666/ffffff?text=Artist'" />
+    <div class="overflow-hidden">
+     <h3 class="font-bold text-purple-950 text-base md:text-lg truncate leading-tight">${artist.name}</h3>
+     <p class="text-purple-700/80 text-xs font-medium truncate">อันดับนักร้อง #${artist.position}</p>
+    </div>
+   </div>
+   <button onclick="loadDeezerArtist(${artist.id})" class="bg-select-btn font-semibold px-4 py-2 rounded-full text-sm shadow transition-all duration-150 hover:scale-105 active:scale-95 shrink-0">ดูเพลง</button>
+  `;
+  songListContainer.appendChild(cardDiv);
  });
  }
 
  function renderAlbumList() {
- updateSongSortAvailability();
- const visibleAlbums = popularAlbumList.slice(0, visibleAlbumCount);
- document.getElementById('track-count').textContent = `(${visibleAlbums.length} อัลบั้ม)`;
+ setSongSortButtonsEnabled(false);
+ document.getElementById('track-count').textContent = `(${popularAlbumList.length} อัลบั้ม)`;
  songListContainer.innerHTML = '';
 
- visibleAlbums.forEach(album => {
+ popularAlbumList.forEach(album => {
  const cardDiv = document.createElement('div');
  cardDiv.className = 'bg-card-item rounded-2xl p-3 flex items-center justify-between transition-all duration-200 hover:shadow-lg';
  cardDiv.innerHTML = `
@@ -472,43 +411,22 @@ showToast(`โหลดเพลงจาก Deezer แล้ว ${songList.leng
  });
  }
 
- function updateLoadMoreButton() {
- loadMoreButton.hidden = isAlbumListVisible ? !hasMoreAlbums : isArtistListVisible ? !hasMoreArtists : !hasMoreSongs;
- loadMoreButton.disabled = isLoadingMoreSongs;
- loadMoreButton.innerHTML = isLoadingMoreSongs
- ? '<i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดเพลง...'
- : '<i class="fa-solid fa-plus"></i>';
- }
-
  function setSongSortButtonsEnabled(enabled) {
  ['sort-duration', 'sort-rank'].forEach(buttonId => {
  const button = document.getElementById(buttonId);
  button.disabled = !enabled;
  button.setAttribute('aria-disabled', String(!enabled));
- button.classList.toggle('bg-transparent', !enabled);
- button.classList.toggle('bg-white', enabled && buttonId !== activeSortButtonId);
  button.classList.toggle('text-neutral-500', !enabled);
- button.classList.toggle('text-neutral-900', enabled && buttonId !== activeSortButtonId);
- button.classList.toggle('text-white', enabled && buttonId === activeSortButtonId);
  button.classList.toggle('opacity-40', !enabled);
  button.classList.toggle('cursor-not-allowed', !enabled);
- button.classList.toggle('shadow', enabled);
- button.classList.toggle('hover:bg-neutral-100', enabled);
- button.classList.toggle('hover:scale-105', enabled);
- button.classList.toggle('active:scale-95', enabled);
  });
  }
 
  let activeSortButtonId = null;
 
- function updateSongSortAvailability() {
- setSongSortButtonsEnabled(!isAlbumListVisible && !isArtistListVisible);
- }
-  
  function renderSongList(dataToRender = songList) {  
- isAlbumListVisible = false;
- isArtistListVisible = false;
- updateSongSortAvailability();
+ currentListType = 'songs';
+ setSongSortButtonsEnabled(true);
  document.getElementById('track-count').textContent = `(${dataToRender.length} เพลง)`;  
  songListContainer.innerHTML = '';  
   
@@ -610,7 +528,6 @@ onclick="selectSongById(${song.id}, true)"
  showToast(`เลือกเพลง: "${song.title}"`);  
  }  
  }  
-  
  function sortSongsByDuration() {
  if (document.getElementById('sort-duration').disabled || songList.length <= 1) return;
  const descending = durationSortDescending;
@@ -663,7 +580,6 @@ onclick="selectSongById(${song.id}, true)"
  button.classList.toggle('text-neutral-900', !selected);
  });
  }
-  
  function playAudio() {  
  if (!currentSong) return;  
  if (!currentSong.preview) {  
@@ -721,7 +637,7 @@ onclick="selectSongById(${song.id}, true)"
  audioEngine.volume = val;  
  }  
   
- // AUDIO EVENT LISTENERS  
+ // AUDIO EVENT LISTENERS  **********************************************************************************************
  audioEngine.addEventListener('timeupdate', () => {  
  if (audioEngine.duration) {  
  const pct = (audioEngine.currentTime / audioEngine.duration) * 100;  
